@@ -1,0 +1,40 @@
+<nav class="navbar navbar-expand-md border-bottom custom-navbar sticky-top">
+    <div class="container-fluid">
+
+        <a class="navbar-brand" href="/">
+            <img src="/logo.png" alt="My Logo" height="45">
+        </a>
+
+        <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarNavAltMarkup"
+            aria-controls="navbarNavAltMarkup"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/listings">All Products</a>
+                <a class="nav-link" href="/listings/new">Add Products</a>
+            </div>
+        </div>
+
+        <div class="navbar-actions">
+            <% if (typeof currentUser !== "undefined" && currentUser && currentUser.avatar) { %>
+                <img class="navbar-user-avatar" src="<%= currentUser.avatar %>" alt="<%= currentUser.name || 'User profile' %>">
+            <% } else { %>
+                <span class="navbar-user-avatar navbar-user-placeholder" aria-hidden="true">
+                    <i class="fa-solid fa-user"></i>
+                </span>
+            <% } %>
+            <a class="navbar-login-btn" href="/login">Login</a>
+            <a class="navbar-cart-btn" href="/cart" aria-label="Shopping cart">
+                <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+            </a>
+        </div>
+    </div>
+</nav>

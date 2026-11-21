@@ -1,0 +1,141 @@
+<% layout("/layouts/boilerplate")%>
+<body>
+<section class="hero-carousel" id="heroCarousel" tabindex="0" aria-label="Featured Gavlee products">
+  <div class="hero-scene" id="heroScene" aria-live="polite">
+    <div class="hero-copy">
+      <p class="hero-eyebrow">FRESH FROM GAVLEE</p>
+      <h1 id="heroTitle">Farm fresh goodness, every day</h1>
+      <p id="heroDescription">Discover dairy favourites made with care and delivered with freshness.</p>
+      <a href="#products" class="hero-cta">Explore products</a>
+    </div>
+    <img id="heroImage" src="/images/milk.jpeg" alt="Fresh Gavlee milk">
+  </div>
+  <button class="hero-arrow hero-previous" type="button" aria-label="Previous featured product">&#10094;</button>
+  <button class="hero-arrow hero-next" type="button" aria-label="Next featured product">&#10095;</button>
+  <div class="hero-dots" id="heroDots" aria-label="Choose featured slide"></div>
+</section>
+
+<h3 style="padding: 1rem 0;">All Products</h3>
+  <div id="products" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+  <% for(let listing of allListings) { %>
+  <div class="col listing-column">
+  <div class="card listing-card">
+    <img src="<%=listing.image%>" class="card-img-top listing-card-img" alt="<%= listing.title %>">
+  <div class="card-body">         
+    <h5 class="card-title"><a href="/listings/<%= listing._id %>" class="text-decoration-none text-reset"><%= listing.title %></a></h5>
+    <p class="card-text"><%= listing.description %></p>
+  </div>
+  <ul class="list-group list-group-flush">
+    <li class="list-group-item"><%= listing.Nutrients %></li>
+    <% if (["LASSI", "ICE CREAMS", "SHRIKHAND", "WHEY", "WHIPPED CREAM"].includes(listing.title.trim().toUpperCase())) { %>
+    <li class="list-group-item"><div class="dropdown">
+  <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Flavour
+  </button>
+  <ul class="dropdown-menu dropdown-menu-dark">
+    <li><a class="dropdown-item active" href="#">Mango</a></li>
+    <li><a class="dropdown-item" href="#">Strawberry</a></li>
+    <li><a class="dropdown-item" href="#">Sweet Kesar</a></li>
+    <li><a class="dropdown-item" href="#">Masala</a></li>
+  </ul>
+</div></li>
+    <% } %>
+    <li class="list-group-item">₹<%= listing.price%></li>
+  </ul>
+  <div class="card-body listing-card-actions">
+    <a href="/listings/<%= listing._id %>/edit" class="btn btn-info">Edit Product</a>
+    <a href="#" class="btn btn-success">Add to cart</a>
+  </div>
+</div>
+</div>
+<% } %>
+</div>
+<script>
+  (() => {
+    const slides = [
+      {
+        image: "/images/milk.jpeg",
+        alt: "Fresh Gavlee cow milk",
+        title: "Farm fresh goodness, every day",
+        description: "Discover dairy favourites made with care and delivered with freshness."
+      },
+      {
+        image: "/images/ghee.jpeg",
+        alt: "Gavlee pure cow ghee",
+        title: "Bring home the richness of pure ghee",
+        description: "Aromatic, golden and made for the meals you love."
+      },
+      {
+        image: "/images/Ice_creams.jpeg",
+        alt: "Gavlee creamy ice cream",
+        title: "A little delight in every scoop",
+        description: "Explore creamy treats and other Gavlee favourites."
+      }
+    ];
+    const scene = document.getElementById("heroScene");
+    const image = document.getElementById("heroImage");
+    const title = document.getElementById("heroTitle");
+    const description = document.getElementById("heroDescription");
+    const dots = document.getElementById("heroDots");
+    let current = 0;
+    let timer;
+    let transitioning = false;
+
+    slides.forEach((slide, index) => {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "hero-dot";
+      dot.setAttribute("aria-label", `Show slide ${index + 1}`);
+      dot.addEventListener("click", () => showSlide(index, index >= current ? 1 : -1));
+      dots.appendChild(dot);
+    });
+
+    function syncDots() {
+      [...dots.children].forEach((dot, index) => {
+        dot.classList.toggle("active", index === current);
+        dot.setAttribute("aria-current", index === current ? "true" : "false");
+      });
+    }
+
+    function showSlide(index, direction) {
+      if (transitioning || index === current) return;
+      transitioning = true;
+      scene.classList.add("is-transitioning", direction > 0 ? "from-next" : "from-previous");
+      window.setTimeout(() => {
+        current = (index + slides.length) % slides.length;
+        image.src = slides[current].image;
+        image.alt = slides[current].alt;
+        title.textContent = slides[current].title;
+        description.textContent = slides[current].description;
+        syncDots();
+        scene.classList.remove("is-transitioning", "from-next", "from-previous");
+        transitioning = false;
+      }, 240);
+      resetTimer();
+    }
+
+    function nextSlide() { showSlide((current + 1) % slides.length, 1); }
+    function previousSlide() { showSlide((current - 1 + slides.length) % slides.length, -1); }
+    function resetTimer() {
+      window.clearInterval(timer);
+      timer = window.setInterval(nextSlide, 6000);
+    }
+
+    document.querySelector(".hero-next").addEventListener("click", nextSlide);
+    document.querySelector(".hero-previous").addEventListener("click", previousSlide);
+    document.getElementById("heroCarousel").addEventListener("click", event => {
+      if (event.target.closest("button, a")) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX >= bounds.left + bounds.width / 2) nextSlide();
+      else previousSlide();
+    });
+    document.getElementById("heroCarousel").addEventListener("keydown", event => {
+      if (event.key === "ArrowRight") nextSlide();
+      if (event.key === "ArrowLeft") previousSlide();
+    });
+    syncDots();
+    resetTimer();
+  })();
+</script>
+</body>
+
