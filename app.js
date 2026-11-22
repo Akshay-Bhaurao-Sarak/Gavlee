@@ -10,6 +10,17 @@ const ejsMate = require("ejs-mate");
 
 const MONGO_URL = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/gavlee";
 
+function parseFlavourOptions(options) {
+    if (!options) return [];
+    const entries = Array.isArray(options) ? options : [options];
+    return entries
+        .map(option => ({
+            name: String(option.name || "").trim(),
+            price: Number(option.price),
+        }))
+        .filter(option => option.name && Number.isFinite(option.price) && option.price >= 0);
+}
+
 main()
 .then(() => {
     console.log("Connected to Db");
@@ -55,14 +66,14 @@ app.get("/listings/:id",async (req,res) =>{
 //creat route
 app.post("/listings" , async (req,res) => {
     const listingData = { ...req.body.listing };
+    listingData.hasFlavours = listingData.hasFlavours === "true";
     if (listingData.image && !/^https?:\/\//i.test(listingData.image)) {
         listingData.image = listingData.image.replace(/^public\//, "");
         if (!listingData.image.startsWith("/")) listingData.image = `/${listingData.image}`;
     }
-    if (listingData.flavours) {
-        listingData.flavours = listingData.flavours.split(",").map(flavour => flavour.trim()).filter(Boolean);
-        if (listingData.flavours.length === 0) delete listingData.flavours;
-    }
+    listingData.flavourOptions = listingData.hasFlavours ? parseFlavourOptions(listingData.flavourOptions) : [];
+    listingData.flavours = listingData.flavourOptions.map(option => option.name);
+    if (listingData.flavourOptions.length) listingData.price = String(listingData.flavourOptions[0].price);
     const newListing = new Listing(listingData);
     await newListing.save();
     res.redirect("/listings");
@@ -78,8 +89,17 @@ app.get("/listings/:id/edit", async (req,res) => {
 //Update route
 app.put("/listings/:id", async(req,res)=>{
     let{id} = req.params;
-    await Listing.findByIdAndUpdate(id,{...req.body.listing});
-    res.redirect(`/listings/${id}`);
+    const listingData = { ...req.body.listing };
+    listingData.hasFlavours = listingData.hasFlavours === "true";
+    if (listingData.image && !/^https?:\/\//i.test(listingData.image)) {
+        listingData.image = listingData.image.replace(/^public\//, "");
+        if (!listingData.image.startsWith("/")) listingData.image = `/${listingData.image}`;
+    }
+    listingData.flavourOptions = listingData.hasFlavours ? parseFlavourOptions(listingData.flavourOptions) : [];
+    listingData.flavours = listingData.flavourOptions.map(option => option.name);
+    if (listingData.flavourOptions.length) listingData.price = String(listingData.flavourOptions[0].price);
+    await Listing.findByIdAndUpdate(id, listingData);
+    res.redirect("/listings");
 });
 
 //Delete route

@@ -1,5 +1,4 @@
 <% layout("/layouts/boilerplate") %>
-
 <main class="new-product-page">
   <header class="new-product-heading">
     <p class="new-product-eyebrow">GAVLEE • PRODUCT COLLECTION</p>
@@ -23,7 +22,7 @@
           <input id="product-title" name="listing[title]" placeholder="e.g. Fresh Cow Milk" type="text" class="form-control" required>
         </div>
 
-        <div class="new-product-field">
+        <div id="product-base-price-field" class="new-product-field">
           <label for="product-price" class="form-label">Price (₹) <span aria-hidden="true">*</span></label>
           <input id="product-price" name="listing[price]" placeholder="Enter price" type="number" min="0" step="0.01" class="form-control" required>
         </div>
@@ -39,15 +38,16 @@
           <div class="form-text">For any image <code>present locally</code>, use its <code>relative path</code>.</div>
         </div>
 
-        <div class="new-product-field">
+        <div class="new-product-field new-product-field-wide">
           <div class="form-check new-product-flavour-toggle">
             <input id="has-flavours" type="checkbox" class="form-check-input" aria-controls="product-flavours-field">
             <label for="has-flavours" class="form-check-label">This product has flavours</label>
           </div>
+          <input id="has-flavours-value" type="hidden" name="listing[hasFlavours]" value="false">
           <div id="product-flavours-field" class="new-product-flavours-field" hidden>
-            <label for="product-flavours" class="form-label">Flavours</label>
-            <input id="product-flavours" name="listing[flavours]" placeholder="e.g. Mango, Strawberry" type="text" class="form-control" disabled>
-            <div class="form-text">Separate multiple flavours with commas.</div>
+            <p class="form-label">Add each flavour with its price</p>
+            <div id="flavour-options" class="flavour-options-editor"></div>
+            <button id="add-flavour-option" type="button" class="btn btn-outline-secondary btn-sm flavour-add-option"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add another flavour</button>
           </div>
         </div>
 
@@ -67,13 +67,61 @@
 <script>
   (() => {
     const toggle = document.getElementById("has-flavours");
+    const toggleValue = document.getElementById("has-flavours-value");
     const field = document.getElementById("product-flavours-field");
-    const input = document.getElementById("product-flavours");
+    const basePriceField = document.getElementById("product-base-price-field");
+    const basePrice = document.getElementById("product-price");
+    const options = document.getElementById("flavour-options");
+    let nextOption = 0;
+
+    function addOption() {
+      const row = document.createElement("div");
+      row.className = "flavour-option-row";
+      row.innerHTML = `
+        <div>
+          <label class="form-label" for="flavour-name-${nextOption}">Flavour</label>
+          <input id="flavour-name-${nextOption}" name="listing[flavourOptions][${nextOption}][name]" type="text" class="form-control" placeholder="e.g. Mango" required>
+        </div>
+        <div>
+          <label class="form-label" for="flavour-price-${nextOption}">Price (₹)</label>
+          <input id="flavour-price-${nextOption}" name="listing[flavourOptions][${nextOption}][price]" type="number" min="0" step="0.01" class="form-control" placeholder="Enter price" required>
+        </div>
+        <button type="button" class="btn btn-outline-danger flavour-remove-option" aria-label="Remove flavour">&times;</button>`;
+      options.appendChild(row);
+      nextOption += 1;
+      updateRemoveButtons();
+    }
+
+    function updateRemoveButtons() {
+      const rows = [...options.querySelectorAll(".flavour-option-row")];
+      rows.forEach(row => {
+        row.querySelector(".flavour-remove-option").disabled = rows.length === 1;
+      });
+    }
+
+    function setFlavoursEnabled(enabled) {
+      toggleValue.value = String(enabled);
+      field.hidden = !enabled;
+      basePriceField.hidden = enabled;
+      basePrice.disabled = enabled;
+      basePrice.required = !enabled;
+      options.querySelectorAll("input").forEach(input => {
+        input.disabled = !enabled;
+      });
+    }
+
+    options.addEventListener("click", event => {
+      if (event.target.closest(".flavour-remove-option") && options.children.length > 1) {
+        event.target.closest(".flavour-option-row").remove();
+        updateRemoveButtons();
+      }
+    });
+    document.getElementById("add-flavour-option").addEventListener("click", addOption);
+    addOption();
 
     toggle.addEventListener("change", () => {
-      field.hidden = !toggle.checked;
-      input.disabled = !toggle.checked;
-      if (!toggle.checked) input.value = "";
+      setFlavoursEnabled(toggle.checked);
     });
+    setFlavoursEnabled(false);
   })();
 </script>

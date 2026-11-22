@@ -207,6 +207,113 @@ font-weight:400 !important;
     display: flex;
 }
 
+/* Edit view uses the same product card structure as All Products. */
+.edit-listing-page {
+    margin: 2.5rem 0 4rem;
+}
+
+.edit-listing-page > .row {
+    justify-content: center;
+}
+
+.edit-listing-heading {
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.edit-listing-heading h1 {
+    margin-bottom: 0.4rem;
+    color: #25251f;
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    font-weight: 750;
+    letter-spacing: -0.04em;
+}
+
+.edit-listing-heading > p:last-child {
+    margin: 0;
+    color: #69675f;
+}
+
+.edit-listing-card {
+    padding: 0;
+}
+
+.edit-listing-card .edit-listing-image-field {
+    padding: 0.4rem 1rem 0.7rem !important;
+}
+
+.edit-listing-image-field .form-label,
+.edit-listing-fields .form-label {
+    margin-bottom: 0.35rem;
+    color: #35342e;
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.edit-card-control {
+    border-color: #dcd8ce;
+    border-radius: 0.5rem;
+    background-color: #fffefa;
+}
+
+.edit-card-control:focus,
+.edit-card-title:focus {
+    border-color: #b69a50;
+    box-shadow: 0 0 0 0.2rem rgb(212 175 55 / 18%);
+}
+
+.edit-listing-main-fields {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.5rem 1rem 1rem !important;
+}
+
+.edit-card-title {
+    padding: 0.25rem 0.35rem;
+    border-color: transparent;
+    color: #25251f;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.edit-card-title:focus {
+    border-color: #b69a50;
+}
+
+.edit-listing-fields .list-group-item {
+    padding: 0.8rem 1rem;
+}
+
+.edit-flavour-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.edit-flavour-toggle .form-check-input {
+    margin: 0;
+}
+
+.edit-flavours-field:not([hidden]) {
+    margin-top: 0.7rem;
+}
+
+.edit-listing-actions {
+    display: flex;
+    gap: 0.55rem;
+    padding: 1rem !important;
+}
+
+@media (max-width: 575.98px) {
+    .edit-listing-page {
+        margin-top: 1.75rem;
+    }
+
+    .edit-listing-actions > .btn {
+        flex: 1;
+    }
+}
+
 /* Add product page: match the warm Gavlee palette and card styling. */
 .new-product-page {
     max-width: 850px;
@@ -345,6 +452,54 @@ font-weight:400 !important;
     margin-top: 0.8rem;
 }
 
+.flavour-options-editor {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.flavour-option-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.65rem;
+    padding: 0.8rem;
+    border: 1px solid #e8e2d6;
+    border-radius: 0.65rem;
+    background: #fbfaf6;
+}
+
+.flavour-option-row .form-label {
+    margin-bottom: 0.35rem;
+}
+
+.flavour-remove-option {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    font-size: 1.25rem;
+}
+
+.flavour-add-option {
+    margin-top: 0.75rem;
+}
+
+.listing-flavour-price-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.listing-flavour-price-row .product-flavour-select {
+    min-width: 0;
+    flex: 1;
+}
+
+.listing-flavour-price {
+    flex: 0 0 auto;
+    color: #25251f;
+    white-space: nowrap;
+}
+
 .new-product-form-actions {
     display: flex;
     align-items: center;
@@ -408,6 +563,12 @@ font-weight:400 !important;
 
     .new-product-submit {
         width: 100%;
+    }
+
+    .flavour-option-row {
+        grid-template-columns: 1fr 1fr auto;
+        gap: 0.45rem;
+        padding: 0.65rem;
     }
 }
 

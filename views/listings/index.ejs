@@ -18,6 +18,14 @@
 <h3 style="padding: 1rem 0;">All Products</h3>
   <div id="products" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
   <% for(let listing of allListings) { %>
+  <% const savedFlavourOptions = (listing.flavourOptions || []).filter(option => option && option.name);
+     const legacyFlavours = (listing.flavours || []).filter(Boolean);
+     const defaultFlavourTitles = ["LASSI", "ICE CREAMS", "SHRIKHAND", "WHIPPED CREAM", "WHEY"];
+     let cardFlavours = savedFlavourOptions.length ? savedFlavourOptions : legacyFlavours.map(name => ({ name, price: listing.price }));
+     if (!cardFlavours.length && listing.hasFlavours !== false && defaultFlavourTitles.includes(listing.title.trim().toUpperCase())) {
+       cardFlavours = ["Mango", "Strawberry", "Sweet Kesar", "Masala"].map(name => ({ name, price: listing.price }));
+     }
+  %>
   <div class="col listing-column">
   <div class="card listing-card">
     <img src="<%=listing.image%>" class="card-img-top listing-card-img" alt="<%= listing.title %>">
@@ -27,19 +35,19 @@
   </div>
   <ul class="list-group list-group-flush">
     <li class="list-group-item"><%= listing.Nutrients %></li>
-    <% if (listing.flavours && listing.flavours.length > 0) { %>
-    <li class="list-group-item"><div class="dropdown">
-  <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-    Flavour
-  </button>
-  <ul class="dropdown-menu dropdown-menu-dark">
-    <% listing.flavours.forEach((flavour, index) => { %>
-    <li><a class="dropdown-item <%= index === 0 ? 'active' : '' %>" href="#"><%= flavour %></a></li>
-    <% }) %>
-  </ul>
-</div></li>
+    <% if (cardFlavours.length) { %>
+    <li class="list-group-item listing-flavour-price-row">
+      <label class="visually-hidden" for="flavour-select-<%= listing._id %>">Choose flavour</label>
+      <select id="flavour-select-<%= listing._id %>" class="form-select product-flavour-select" aria-label="Choose flavour">
+        <% cardFlavours.forEach((flavour, index) => { %>
+        <option value="<%= flavour.name %>" data-price="<%= flavour.price %>" <%= index === 0 ? 'selected' : '' %>><%= flavour.name %></option>
+        <% }) %>
+      </select>
+      <strong class="listing-flavour-price">₹<span class="product-flavour-price"><%= cardFlavours[0].price %></span></strong>
+    </li>
+    <% } else { %>
+    <li class="list-group-item">₹<%= listing.price %></li>
     <% } %>
-    <li class="list-group-item">₹<%= listing.price%></li>
   </ul>
   <div class="card-body listing-card-actions">
     <a href="/listings/<%= listing._id %>/edit" class="btn btn-info">Edit Product</a>
@@ -135,6 +143,15 @@
     syncDots();
     resetTimer();
   })();
+</script>
+<script>
+  document.querySelectorAll(".product-flavour-select").forEach(select => {
+    select.addEventListener("change", () => {
+      const selectedOption = select.selectedOptions[0];
+      const price = select.closest(".listing-flavour-price-row").querySelector(".product-flavour-price");
+      price.textContent = selectedOption.dataset.price;
+    });
+  });
 </script>
 </body>
 

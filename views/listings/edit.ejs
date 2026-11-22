@@ -1,26 +1,147 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gavlee</title>
-</head>
-<body>
-    <h3>Edit Product</h3>
-    <form method="POST" action="/listings/<%= listing._id %>?_method=PUT">
-        <input name="listing[title]" value="<%= listing.title %>" type="text"/>
-        <br><br/>
-        <textarea name="listing[description]">"<%= listing.description %>"</textarea>
-        <br><br/>
-        <input name="listing[image]" value = "<%= listing.image %>" type="text"/>
-        <br><br/>
-        <input name="listing[flavours]" value="<%= (listing.flavours || []).join(', ') %>" placeholder="Flavours, separated by commas (e.g. Mango, Strawberry)" type="text"/>
-        <br><br/>
-        <input name="listing[price]" value= "<%=listing.price %>" type="number"/>
-        <br><br/>
-        <input name="listing[Nutrients]" value= "<%= listing.Nutrients %>" type="text"/>
-        <br><br/>
-        <button>Edit</button>
-    </form>
-</body>
-</html>
+<% layout("/layouts/boilerplate") %>
+<%
+  const legacyTitles = ["LASSI", "ICE CREAMS", "SHRIKHAND", "WHIPPED CREAM", "WHEY"];
+  const titleHasLegacyFlavours = legacyTitles.includes(listing.title.trim().toUpperCase());
+  const savedOptions = (listing.flavourOptions || []).filter(option => option && option.name);
+  const oldFlavours = (listing.flavours || []).filter(Boolean);
+  const showFlavours = listing.hasFlavours === true || savedOptions.length > 0 ||
+    (listing.hasFlavours == null && (oldFlavours.length > 0 || titleHasLegacyFlavours));
+  let optionsToEdit = savedOptions.length
+    ? savedOptions
+    : oldFlavours.map(name => ({ name, price: listing.price }));
+  if (!optionsToEdit.length && showFlavours && titleHasLegacyFlavours) {
+    optionsToEdit = ["Mango", "Strawberry", "Sweet Kesar", "Masala"].map(name => ({ name, price: listing.price }));
+  }
+  if (!optionsToEdit.length) optionsToEdit = [{ name: "", price: "" }];
+%>
+
+<main class="edit-listing-page">
+  <header class="edit-listing-heading">
+    <p class="new-product-eyebrow">GAVLEE • PRODUCT COLLECTION</p>
+    <h1>Edit Product</h1>
+    <p>Make changes directly on the product card.</p>
+  </header>
+
+  <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+    <div class="col listing-column">
+      <form method="POST" action="/listings/<%= listing._id %>?_method=PUT" class="card listing-card edit-listing-card">
+        <img id="edit-product-preview" src="<%= listing.image %>" class="card-img-top listing-card-img" alt="<%= listing.title %>">
+
+        <div class="card-body edit-listing-image-field">
+          <label for="product-image" class="form-label">Product image</label>
+          <input id="product-image" name="listing[image]" value="<%= listing.image %>" placeholder="/images/product.jpeg or image URL" type="text" class="form-control edit-card-control">
+        </div>
+
+        <div class="card-body edit-listing-main-fields">
+          <label for="product-title" class="visually-hidden">Product name</label>
+          <input id="product-title" name="listing[title]" value="<%= listing.title %>" type="text" class="form-control edit-card-title" required>
+          <label for="product-description" class="visually-hidden">Product description</label>
+          <textarea id="product-description" name="listing[description]" rows="4" class="form-control edit-card-control" required><%= listing.description %></textarea>
+        </div>
+
+        <ul class="list-group list-group-flush edit-listing-fields">
+          <li class="list-group-item">
+            <label for="product-nutrients" class="form-label">Nutrients</label>
+            <input id="product-nutrients" name="listing[Nutrients]" value="<%= listing.Nutrients %>" placeholder="e.g. Protein, calcium" type="text" class="form-control edit-card-control">
+          </li>
+          <li id="product-base-price-field" class="list-group-item" <%= showFlavours ? 'hidden' : '' %>>
+            <label for="product-price" class="form-label">Price (₹)</label>
+            <div class="input-group">
+              <span class="input-group-text">₹</span>
+              <input id="product-price" name="listing[price]" value="<%= listing.price %>" type="number" min="0" step="0.01" class="form-control edit-card-control" <%= showFlavours ? 'disabled' : 'required' %>>
+            </div>
+          </li>
+          <li class="list-group-item">
+            <div class="form-check edit-flavour-toggle">
+              <input id="has-flavours" type="checkbox" class="form-check-input" aria-controls="product-flavours-field" <%= showFlavours ? 'checked' : '' %>>
+              <label for="has-flavours" class="form-check-label">This product has flavours</label>
+            </div>
+            <input id="has-flavours-value" type="hidden" name="listing[hasFlavours]" value="<%= showFlavours ? 'true' : 'false' %>">
+            <div id="product-flavours-field" class="edit-flavours-field" <%= showFlavours ? '' : 'hidden' %>>
+              <p class="form-label">Flavour and price options</p>
+              <div id="flavour-options" class="flavour-options-editor">
+                <% optionsToEdit.forEach((option, index) => { %>
+                <div class="flavour-option-row">
+                  <div>
+                    <label class="form-label" for="flavour-name-<%= index %>">Flavour</label>
+                    <input id="flavour-name-<%= index %>" name="listing[flavourOptions][<%= index %>][name]" value="<%= option.name %>" type="text" class="form-control edit-card-control" placeholder="e.g. Mango" <%= showFlavours ? 'required' : 'disabled' %>>
+                  </div>
+                  <div>
+                    <label class="form-label" for="flavour-price-<%= index %>">Price (₹)</label>
+                    <input id="flavour-price-<%= index %>" name="listing[flavourOptions][<%= index %>][price]" value="<%= option.price %>" type="number" min="0" step="0.01" class="form-control edit-card-control" placeholder="Enter price" <%= showFlavours ? 'required' : 'disabled' %>>
+                  </div>
+                  <button type="button" class="btn btn-outline-danger flavour-remove-option" aria-label="Remove flavour" <%= optionsToEdit.length === 1 ? 'disabled' : '' %>>&times;</button>
+                </div>
+                <% }) %>
+              </div>
+              <button id="add-flavour-option" type="button" class="btn btn-outline-secondary btn-sm flavour-add-option"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add another flavour</button>
+            </div>
+          </li>
+        </ul>
+
+        <div class="card-body listing-card-actions edit-listing-actions">
+          <button type="submit" class="btn btn-info">Save changes</button>
+          <a href="/listings" class="btn btn-success">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</main>
+
+<script>
+  (() => {
+    const toggle = document.getElementById("has-flavours");
+    const toggleValue = document.getElementById("has-flavours-value");
+    const field = document.getElementById("product-flavours-field");
+    const basePriceField = document.getElementById("product-base-price-field");
+    const basePrice = document.getElementById("product-price");
+    const options = document.getElementById("flavour-options");
+    const imageInput = document.getElementById("product-image");
+    const imagePreview = document.getElementById("edit-product-preview");
+    let nextOption = options.querySelectorAll(".flavour-option-row").length;
+
+    function updateRemoveButtons() {
+      const rows = [...options.querySelectorAll(".flavour-option-row")];
+      rows.forEach(row => row.querySelector(".flavour-remove-option").disabled = rows.length === 1);
+    }
+
+    function addOption() {
+      const row = document.createElement("div");
+      row.className = "flavour-option-row";
+      row.innerHTML = `
+        <div><label class="form-label" for="flavour-name-${nextOption}">Flavour</label><input id="flavour-name-${nextOption}" name="listing[flavourOptions][${nextOption}][name]" type="text" class="form-control edit-card-control" placeholder="e.g. Mango" required></div>
+        <div><label class="form-label" for="flavour-price-${nextOption}">Price (₹)</label><input id="flavour-price-${nextOption}" name="listing[flavourOptions][${nextOption}][price]" type="number" min="0" step="0.01" class="form-control edit-card-control" placeholder="Enter price" required></div>
+        <button type="button" class="btn btn-outline-danger flavour-remove-option" aria-label="Remove flavour">&times;</button>`;
+      options.appendChild(row);
+      nextOption += 1;
+      updateRemoveButtons();
+    }
+
+    function setFlavoursEnabled(enabled) {
+      toggleValue.value = String(enabled);
+      field.hidden = !enabled;
+      basePriceField.hidden = enabled;
+      basePrice.disabled = enabled;
+      basePrice.required = !enabled;
+      options.querySelectorAll("input").forEach(input => {
+        input.disabled = !enabled;
+        input.required = enabled;
+      });
+    }
+
+    options.addEventListener("click", event => {
+      if (event.target.closest(".flavour-remove-option") && options.children.length > 1) {
+        event.target.closest(".flavour-option-row").remove();
+        updateRemoveButtons();
+      }
+    });
+    document.getElementById("add-flavour-option").addEventListener("click", addOption);
+    toggle.addEventListener("change", () => setFlavoursEnabled(toggle.checked));
+    setFlavoursEnabled(toggle.checked);
+
+    imageInput.addEventListener("input", () => {
+      const path = imageInput.value.trim();
+      imagePreview.src = path.startsWith("public/") ? `/${path.slice(7)}` : path;
+    });
+  })();
+</script>
