@@ -81,12 +81,15 @@
 
         <div class="card-body listing-card-actions edit-listing-actions">
           <button type="submit" class="btn btn-info">Save changes</button>
+          <button type="submit" form="delete-listing-form" class="btn edit-listing-delete">Delete</button>
           <a href="/listings" class="btn btn-success">Cancel</a>
         </div>
       </form>
     </div>
   </div>
 </main>
+
+<form id="delete-listing-form" method="POST" action="/listings/<%= listing._id %>?_method=DELETE"></form>
 
 <script>
   (() => {

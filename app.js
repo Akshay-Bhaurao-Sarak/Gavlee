@@ -42,7 +42,16 @@ app.use(express.static("public"));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/",(req,res)=>{
-    res.send("Hi i am gavlee");
+    res.send(`<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gavlee</title>
+    <link rel="icon" type="image/x-icon" href="/gavlee-favicon-large.ico">
+</head>
+<body>Hi i am gavlee</body>
+</html>`);
 });
 
 //index route

@@ -304,6 +304,19 @@ font-weight:400 !important;
     padding: 1rem !important;
 }
 
+.edit-listing-delete {
+    border-color: #B83232;
+    background: #B83232;
+    color: #fff;
+}
+
+.edit-listing-delete:hover,
+.edit-listing-delete:focus-visible {
+    border-color: #922626;
+    background: #922626;
+    color: #fff;
+}
+
 @media (max-width: 575.98px) {
     .edit-listing-page {
         margin-top: 1.75rem;
