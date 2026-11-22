@@ -1,27 +1,79 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gavlee</title>
-</head>
-<body>
-    <h3>Add New Product</h3>
-    <form method="POST" action="/listings">
-        <input name="listing[title]" placeholder="Enter Product Name" type="text"/>
-        <br><br/>
-        <textarea name="listing[description]" placeholder="Enter Description"></textarea>
-        <br><br/>
-        <input name="listing[image]" placeholder="Enter image URL/Link" type="text"/>
-        <br><br/>
-        <input name="listing[flavours]" placeholder="Flavours, separated by commas (e.g. Mango, Strawberry)" type="text"/>
-        <br><br/>
-        <input name="listing[price]" placeholder="Enter price" type="String"/>
-        <br><br/>
-        <input name="listing[Nutrients]" placeholder="Enter Nutrients" type="text"/>
-        <br><br/>
-        <button>ADD</button>
+<% layout("/layouts/boilerplate") %>
+
+<main class="new-product-page">
+  <header class="new-product-heading">
+    <p class="new-product-eyebrow">GAVLEE • PRODUCT COLLECTION</p>
+    <h1>Add New Product</h1>
+    <p>Share a fresh favourite with your customers. Add the product details below.</p>
+  </header>
+
+  <section class="new-product-card" aria-labelledby="newProductFormTitle">
+    <div class="new-product-card-heading">
+      <img class="new-product-mark" src="/logo.png" alt="Gavlee logo">
+      <div>
+        <h2 id="newProductFormTitle">Product details</h2>
+        <p>Fields marked with <span aria-hidden="true">*</span> are required.</p>
+      </div>
+    </div>
+
+    <form method="POST" action="/listings" class="new-product-form">
+      <div class="new-product-fields">
+        <div class="new-product-field">
+          <label for="product-title" class="form-label">Product name <span aria-hidden="true">*</span></label>
+          <input id="product-title" name="listing[title]" placeholder="e.g. Fresh Cow Milk" type="text" class="form-control" required>
+        </div>
+
+        <div class="new-product-field">
+          <label for="product-price" class="form-label">Price (₹) <span aria-hidden="true">*</span></label>
+          <input id="product-price" name="listing[price]" placeholder="Enter price" type="number" min="0" step="0.01" class="form-control" required>
+        </div>
+
+        <div class="new-product-field new-product-field-wide">
+          <label for="product-description" class="form-label">Description <span aria-hidden="true">*</span></label>
+          <textarea id="product-description" name="listing[description]" placeholder="Tell customers what makes this product special" rows="4" class="form-control" required></textarea>
+        </div>
+
+        <div class="new-product-field new-product-field-wide">
+          <label for="product-image" class="form-label">Image URL or Image Path</label>
+          <input id="product-image" name="listing[image]" placeholder="https://…  or  Relative Path" type="text" class="form-control">
+          <div class="form-text">For any image <code>present locally</code>, use its <code>relative path</code>.</div>
+        </div>
+
+        <div class="new-product-field">
+          <div class="form-check new-product-flavour-toggle">
+            <input id="has-flavours" type="checkbox" class="form-check-input" aria-controls="product-flavours-field">
+            <label for="has-flavours" class="form-check-label">This product has flavours</label>
+          </div>
+          <div id="product-flavours-field" class="new-product-flavours-field" hidden>
+            <label for="product-flavours" class="form-label">Flavours</label>
+            <input id="product-flavours" name="listing[flavours]" placeholder="e.g. Mango, Strawberry" type="text" class="form-control" disabled>
+            <div class="form-text">Separate multiple flavours with commas.</div>
+          </div>
+        </div>
+
+        <div class="new-product-field">
+          <label for="product-nutrients" class="form-label">Nutrients</label>
+          <input id="product-nutrients" name="listing[Nutrients]" placeholder="e.g. Protein, calcium" type="text" class="form-control">
+        </div>
+      </div>
+
+      <div class="new-product-form-actions">
+        <button type="submit" class="btn new-product-submit"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add product</button>
+      </div>
     </form>
-    
-</body>
-</html>
+  </section>
+</main>
+
+<script>
+  (() => {
+    const toggle = document.getElementById("has-flavours");
+    const field = document.getElementById("product-flavours-field");
+    const input = document.getElementById("product-flavours");
+
+    toggle.addEventListener("change", () => {
+      field.hidden = !toggle.checked;
+      input.disabled = !toggle.checked;
+      if (!toggle.checked) input.value = "";
+    });
+  })();
+</script>

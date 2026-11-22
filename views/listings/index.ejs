@@ -27,16 +27,15 @@
   </div>
   <ul class="list-group list-group-flush">
     <li class="list-group-item"><%= listing.Nutrients %></li>
-    <% if (["LASSI", "ICE CREAMS", "SHRIKHAND", "WHEY", "WHIPPED CREAM"].includes(listing.title.trim().toUpperCase())) { %>
+    <% if (listing.flavours && listing.flavours.length > 0) { %>
     <li class="list-group-item"><div class="dropdown">
   <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
     Flavour
   </button>
   <ul class="dropdown-menu dropdown-menu-dark">
-    <li><a class="dropdown-item active" href="#">Mango</a></li>
-    <li><a class="dropdown-item" href="#">Strawberry</a></li>
-    <li><a class="dropdown-item" href="#">Sweet Kesar</a></li>
-    <li><a class="dropdown-item" href="#">Masala</a></li>
+    <% listing.flavours.forEach((flavour, index) => { %>
+    <li><a class="dropdown-item <%= index === 0 ? 'active' : '' %>" href="#"><%= flavour %></a></li>
+    <% }) %>
   </ul>
 </div></li>
     <% } %>
@@ -138,4 +137,5 @@
   })();
 </script>
 </body>
+
 

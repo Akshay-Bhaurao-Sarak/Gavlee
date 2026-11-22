@@ -8,7 +8,7 @@ const ejsMate = require("ejs-mate");
 
 
 
-const MONGO_URL = "mongodb://127.0.0.1:27017/gavlee";
+const MONGO_URL = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/gavlee";
 
 main()
 .then(() => {
@@ -54,7 +54,16 @@ app.get("/listings/:id",async (req,res) =>{
 
 //creat route
 app.post("/listings" , async (req,res) => {
-    const newListing = new Listing(req.body.listing);
+    const listingData = { ...req.body.listing };
+    if (listingData.image && !/^https?:\/\//i.test(listingData.image)) {
+        listingData.image = listingData.image.replace(/^public\//, "");
+        if (!listingData.image.startsWith("/")) listingData.image = `/${listingData.image}`;
+    }
+    if (listingData.flavours) {
+        listingData.flavours = listingData.flavours.split(",").map(flavour => flavour.trim()).filter(Boolean);
+        if (listingData.flavours.length === 0) delete listingData.flavours;
+    }
+    const newListing = new Listing(listingData);
     await newListing.save();
     res.redirect("/listings");
 });
@@ -83,7 +92,8 @@ app.delete("/listings/:id", async (req,res) => {
 
 
 
-app.listen(8080,()=>{
-    console.log("Server is listening to port 8080"); 
+const PORT = process.env.PORT || 8080;
+app.listen(PORT,()=>{
+    console.log(`Server is listening to port ${PORT}`); 
 });
 
