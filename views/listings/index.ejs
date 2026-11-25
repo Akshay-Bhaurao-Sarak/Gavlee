@@ -6,9 +6,8 @@
       <p class="hero-eyebrow">FRESH FROM GAVLEE</p>
       <h1 id="heroTitle">Farm fresh goodness, every day</h1>
       <p id="heroDescription">Discover dairy favourites made with care and delivered with freshness.</p>
-      <a href="#products" class="hero-cta">Explore products</a>
     </div>
-    <img id="heroImage" src="/images/milk.jpeg" alt="Fresh Gavlee milk">
+    <img id="heroImage" src="/milk%20promo.png" alt="Fresh Gavlee milk">
   </div>
   <button class="hero-arrow hero-previous" type="button" aria-label="Previous featured product">&#10094;</button>
   <button class="hero-arrow hero-next" type="button" aria-label="Next featured product">&#10095;</button>
@@ -51,7 +50,15 @@
   </ul>
   <div class="card-body listing-card-actions">
     <a href="/listings/<%= listing._id %>/edit" class="btn btn-info">Edit Product</a>
-    <a href="#" class="btn btn-success">Add to cart</a>
+    <button type="button" class="btn btn-success cart-add-button" data-id="<%= listing._id %>" data-title="<%= listing.title %>" data-image="<%= listing.image %>" data-price="<%= cardFlavours.length ? cardFlavours[0].price : listing.price %>">Add to cart</button>
+    <div class="listing-quantity-picker" aria-label="Choose quantity">
+      <span>Quantity</span>
+      <div class="quantity-stepper">
+        <button type="button" class="quantity-decrease" aria-label="Decrease quantity">−</button>
+        <output class="quantity-value" aria-live="polite">1</output>
+        <button type="button" class="quantity-increase" aria-label="Increase quantity">+</button>
+      </div>
+    </div>
   </div>
 </div>
 </div>
@@ -61,19 +68,19 @@
   (() => {
     const slides = [
       {
-        image: "/images/milk.jpeg",
+        image: "/milk%20promo.png",
         alt: "Fresh Gavlee cow milk",
         title: "Farm fresh goodness, every day",
         description: "Discover dairy favourites made with care and delivered with freshness."
       },
       {
-        image: "/images/ghee.jpeg",
+        image: "/ghee%20promo.png",
         alt: "Gavlee pure cow ghee",
         title: "Bring home the richness of pure ghee",
         description: "Aromatic, golden and made for the meals you love."
       },
       {
-        image: "/images/Ice_creams.jpeg",
+        image: "/hero%20promo.png",
         alt: "Gavlee creamy ice cream",
         title: "A little delight in every scoop",
         description: "Explore creamy treats and other Gavlee favourites."
@@ -152,6 +159,48 @@
       price.textContent = selectedOption.dataset.price;
     });
   });
+</script>
+<script>
+  (() => {
+    const cartKey = "gavleeCart";
+    const readCart = () => { try { return JSON.parse(localStorage.getItem(cartKey) || "[]"); } catch { return []; } };
+    const badge = document.querySelector(".navbar-cart-count");
+    const syncBadge = () => {
+      const count = readCart().reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+      if (badge) { badge.textContent = count; badge.hidden = count === 0; }
+    };
+    document.querySelectorAll(".cart-add-button").forEach(button => {
+      button.addEventListener("click", () => {
+        const card = button.closest(".listing-card");
+        const quantity = Math.max(1, Number(card.querySelector(".quantity-value").textContent) || 1);
+        const select = card.querySelector(".product-flavour-select");
+        const option = select?.selectedOptions[0];
+        const flavour = option?.value || "";
+        const price = Number(option?.dataset.price || button.dataset.price);
+        const item = { id: button.dataset.id, title: button.dataset.title, image: button.dataset.image, flavour, price };
+        if (!Number.isFinite(price) || price < 0) return;
+        const cart = readCart();
+        const existing = cart.find(entry => entry.id === item.id && entry.flavour === item.flavour);
+        if (existing) existing.quantity = (Number(existing.quantity) || 1) + quantity;
+        else cart.push({ ...item, quantity });
+        localStorage.setItem(cartKey, JSON.stringify(cart));
+        syncBadge();
+        const originalText = button.textContent;
+        button.textContent = "Added to cart";
+        window.setTimeout(() => { button.textContent = originalText; }, 1100);
+      });
+    });
+    document.querySelectorAll(".listing-card").forEach(card => {
+      const output = card.querySelector(".quantity-value");
+      card.querySelector(".quantity-decrease").addEventListener("click", () => {
+        output.textContent = Math.max(1, Number(output.textContent) - 1);
+      });
+      card.querySelector(".quantity-increase").addEventListener("click", () => {
+        output.textContent = Number(output.textContent) + 1;
+      });
+    });
+    syncBadge();
+  })();
 </script>
 </body>
 

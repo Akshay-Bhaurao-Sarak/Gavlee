@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
 const Listing = require("./models/listing.js");
+const Order = require("./models/order.js");
 const path = require("path");
 const methodOverride = require("method-override");
 const ejsMate = require("ejs-mate");
@@ -13,6 +14,7 @@ const nodemailer = require("nodemailer");
 const scrypt = promisify(crypto.scrypt);
 const SESSION_COOKIE = "gavlee_session";
 const SESSION_DAYS = 30;
+const DELIVERY_FEE = 80;
 const pendingEmailVerifications = new Map();
 // Local development opens the app directly. Production still requires real sessions.
 const DEV_AUTH_BYPASS = process.env.NODE_ENV !== "production";
@@ -74,7 +76,7 @@ app.use(async (req, res, next) => {
     } catch (error) { next(error); }
 });
 function requireLogin(req, res, next) { if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`); next(); }
-function renderAuth(res, options = {}) { res.render("auth.ejs", { layout: false, mode: "login", stage: "start", email: "", error: "", ...options }); }
+function renderAuth(res, options = {}) { res.render("listings/auth.ejs", { layout: false, mode: "login", stage: "start", email: "", error: "", ...options }); }
 async function startSession(user, res) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
@@ -108,7 +110,106 @@ async function issueVerification(email) {
     pendingEmailVerifications.set(email, { codeHash: sha256(code), expiresAt: Date.now() + 10 * 60 * 1000 });
 }
 
-app.get("/",(req,res)=> res.render("home.ejs"));
+app.get("/",(req,res)=> res.render("listings/home.ejs"));
+app.get("/cart",(req,res) => res.render("listings/cart.ejs", { deliveryFee: DELIVERY_FEE }));
+app.post("/cart/address", requireLogin, async (req,res,next) => {
+    try {
+        const address = String(req.body.address || "").trim().slice(0, 500);
+        if (address.length < 8) return res.status(400).json({ error: "Enter a complete delivery address." });
+        res.json({ address });
+    } catch (error) { next(error); }
+});
+app.post("/orders", requireLogin, async (req, res, next) => {
+    try {
+        const { items, fulfillment, paymentMethod, address } = req.body || {};
+        if (!Array.isArray(items) || !items.length || items.length > 50) return res.status(400).json({ error: "Your cart is empty or too large." });
+        if (!['delivery', 'pickup'].includes(fulfillment)) return res.status(400).json({ error: "Choose delivery or store pickup." });
+        if (fulfillment === "delivery" && !["cod", "online"].includes(paymentMethod)) return res.status(400).json({ error: "Choose a payment method." });
+        if (fulfillment === "pickup" && !["pay-at-store", "online"].includes(paymentMethod)) return res.status(400).json({ error: "Choose a payment method." });
+        const customerName = String(req.user?.name || (DEV_AUTH_BYPASS ? "Local developer" : "Gavlee customer")).trim().slice(0, 100);
+        const customerPhone = "";
+        const customerEmail = String(req.user?.email || "").trim().slice(0, 120);
+        const deliveryAddress = String(address || "").trim().slice(0, 500);
+        if (fulfillment === "delivery" && deliveryAddress.length < 8) return res.status(400).json({ error: "Enter a complete delivery address." });
+
+        let subtotal = 0;
+        let gst = 0;
+        const orderItems = [];
+        for (const item of items) {
+            const quantity = Number(item.quantity);
+            if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) return res.status(400).json({ error: "Check the quantity for each item." });
+            const listing = await Listing.findById(item.id);
+            if (!listing) return res.status(400).json({ error: "A product in your cart is no longer available." });
+            const flavour = String(item.flavour || "").trim().slice(0, 80);
+            let unitPrice = Number(listing.price);
+            if (flavour) {
+                const option = (listing.flavourOptions || []).find(entry => entry.name === flavour);
+                if (option) unitPrice = Number(option.price);
+                else if ((listing.flavours || []).includes(flavour)) unitPrice = Number(listing.price);
+                else if (["LASSI", "ICE CREAMS", "SHRIKHAND", "WHIPPED CREAM", "WHEY"].includes(String(listing.title).trim().toUpperCase()) && ["Mango", "Strawberry", "Sweet Kesar", "Masala"].includes(flavour)) unitPrice = Number(listing.price);
+                else return res.status(400).json({ error: "A selected product option is no longer available." });
+            }
+            if (!Number.isFinite(unitPrice) || unitPrice < 0) return res.status(400).json({ error: "A product has an invalid price." });
+            subtotal += unitPrice * quantity;
+            gst += Math.round(unitPrice * quantity * 0.18 * 100) / 100;
+            orderItems.push({ listing: listing._id, title: listing.title, image: listing.image, flavour, quantity, unitPrice });
+        }
+        subtotal = Math.round(subtotal * 100) / 100;
+        gst = Math.round(gst * 100) / 100;
+        const shipping = fulfillment === "delivery" ? DELIVERY_FEE : 0;
+        let reference;
+        let order;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            reference = `REF${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+            try {
+                const total = Math.round((subtotal + gst + shipping) * 100) / 100;
+                const orderData = { reference, items: orderItems, customer: { name: customerName || "Gavlee customer", phone: customerPhone, email: customerEmail }, fulfillment, address: fulfillment === "delivery" ? deliveryAddress : "", paymentMethod, subtotal, gst, shipping, total, status: paymentMethod === "online" ? "pending" : "placed" };
+                if (paymentMethod === "online") {
+                    const keyId = process.env.RAZORPAY_KEY_ID;
+                    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+                    if (!keyId || !keySecret) return res.status(503).json({ error: "Online payment is not ready yet. Add the Razorpay keys to the server environment." });
+                    const razorpayResponse = await fetch("https://api.razorpay.com/v1/orders", {
+                        method: "POST",
+                        headers: { "Authorization": `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({ amount: Math.round(total * 100), currency: "INR", receipt: reference, notes: { gavlee_reference: reference } }),
+                    });
+                    const razorpayOrder = await razorpayResponse.json();
+                    if (!razorpayResponse.ok) return res.status(502).json({ error: razorpayOrder.error?.description || "Could not start online payment. Please try again." });
+                    orderData.razorpayOrderId = razorpayOrder.id;
+                    order = await Order.create(orderData);
+                    return res.status(201).json({ online: true, keyId, razorpayOrderId: razorpayOrder.id, reference, total, customer: order.customer });
+                }
+                order = await Order.create(orderData);
+                break;
+            } catch (error) { if (error.code !== 11000) throw error; }
+        }
+        if (!order) return res.status(500).json({ error: "Could not create an order reference. Please try again." });
+        res.status(201).json({ reference: order.reference, total: order.total, fulfillment: order.fulfillment });
+    } catch (error) { next(error); }
+});
+app.post("/orders/razorpay/verify", requireLogin, async (req, res, next) => {
+    try {
+        const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+        const secret = process.env.RAZORPAY_KEY_SECRET;
+        if (!process.env.RAZORPAY_KEY_ID || !secret || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) return res.status(400).json({ error: "Payment details are incomplete." });
+        const order = await Order.findOne({ razorpayOrderId, paymentMethod: "online", status: "pending" });
+        if (!order) return res.status(404).json({ error: "The pending order could not be found." });
+        const expected = crypto.createHmac("sha256", secret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest();
+        const received = Buffer.from(String(razorpaySignature), "hex");
+        if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return res.status(400).json({ error: "Payment verification failed." });
+        const keyId = process.env.RAZORPAY_KEY_ID;
+        const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpayPaymentId)}`, {
+            headers: { "Authorization": `Basic ${Buffer.from(`${keyId}:${secret}`).toString("base64")}` },
+        });
+        const payment = await paymentResponse.json();
+        if (!paymentResponse.ok || payment.order_id !== razorpayOrderId || payment.status !== "captured" || payment.amount !== Math.round(order.total * 100) || payment.currency !== "INR") return res.status(400).json({ error: "Payment is not confirmed as captured yet." });
+        order.status = "placed";
+        order.razorpayPaymentId = razorpayPaymentId;
+        await order.save();
+        res.json({ reference: order.reference, total: order.total, fulfillment: order.fulfillment });
+    } catch (error) { next(error); }
+});
+app.get("/checkout/online", (req,res) => res.redirect("/cart"));
 app.get("/login", (req,res) => DEV_AUTH_BYPASS ? res.redirect("/listings") : (req.user ? res.redirect("/listings") : renderAuth(res, { mode: "login", error: req.query.error || "" })));
 app.post("/login", async (req,res,next) => {
     try {

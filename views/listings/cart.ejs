@@ -1,0 +1,353 @@
+<% layout("/layouts/boilerplate") %>
+<main class="gavlee-cart" aria-labelledby="cart-title">
+  <header class="cart-heading">
+    <p class="home-kicker">YOUR GAVLEE PICKS</p>
+    <h1 id="cart-title">Your cart<span>.</span></h1>
+    <p>Everything you picked, gathered in one place.</p>
+  </header>
+
+  <section class="cart-panel" aria-label="Cart items">
+    <div class="cart-list" id="cartItems" aria-live="polite"></div>
+    <div class="cart-empty" id="cartEmpty" hidden>
+      <div class="cart-empty-mark"><img src="/logo.png" alt="Gavlee"></div>
+      <h2>Your cart is taking a little break.</h2>
+      <p>Have a look through the Gavlee favourites and add something you love.</p>
+      <a class="home-button home-button-green" href="/listings">Explore all products <span aria-hidden="true">↗</span></a>
+    </div>
+    <form class="cart-checkout" id="checkoutForm" hidden>
+      <fieldset class="checkout-choice-group">
+        <legend>How would you like your order?</legend>
+        <label class="checkout-choice"><input type="radio" name="fulfillment" value="delivery" checked><span><strong>Home delivery</strong><small>Delivered to your address</small></span></label>
+        <label class="checkout-choice"><input type="radio" name="fulfillment" value="pickup"><span><strong>Pick up from store</strong><small>Collect your order in person</small></span></label>
+      </fieldset>
+      <fieldset class="checkout-choice-group delivery-address-options" id="deliveryAddressOptions" hidden>
+        <legend>Would you like to use a different delivery address?</legend>
+        <label class="checkout-choice" id="savedAddressChoice"><input type="radio" name="addressChoice" value="no" disabled><span><strong>No, use my saved address</strong><small id="savedAddressText"></small></span></label>
+        <label class="checkout-choice" id="newAddressChoice"><input type="radio" name="addressChoice" value="yes" checked><span><strong>Yes, use a different address</strong><small>Enter the address for this order</small></span></label>
+        <div class="new-address-entry" id="newAddressEntry" hidden>
+          <label class="delivery-address-field">New delivery address<textarea id="newDeliveryAddress" autocomplete="street-address" rows="3" maxlength="500"></textarea></label>
+          <button class="address-confirm-button" type="button" id="confirmAddress">Deliver to this address</button>
+        </div>
+        <div class="confirmed-address" id="confirmedAddress" hidden></div>
+      </fieldset>
+      <fieldset class="checkout-choice-group checkout-payment-group" id="checkoutPaymentOptions">
+        <legend>Payment method</legend>
+        <div id="deliveryPayments">
+          <label class="checkout-choice"><input type="radio" name="paymentMethod" value="cod" checked><span><strong>Cash on delivery</strong><small>Pay when your order arrives</small></span></label>
+          <label class="checkout-choice"><input type="radio" name="paymentMethod" value="online"><span><strong>Pay online</strong><small>Secure payment with Razorpay</small></span></label>
+        </div>
+        <div id="pickupPayments" hidden>
+          <label class="checkout-choice"><input type="radio" name="paymentMethod" value="pay-at-store" checked><span><strong>Pay at store</strong><small>Pay when you collect your order</small></span></label>
+          <label class="checkout-choice"><input type="radio" name="paymentMethod" value="online"><span><strong>Pay online</strong><small>Secure payment with Razorpay</small></span></label>
+        </div>
+      </fieldset>
+      <div class="cart-summary">
+      <div class="cart-breakdown-row"><span>Items total</span><strong>₹<span id="itemsTotal">0</span></strong></div>
+        <div class="cart-breakdown-row" id="shippingRow"><span>Shipping</span><strong>₹<span id="shippingTotal"><%= deliveryFee %></span></strong></div>
+        <div class="cart-total-row"><span class="cart-total-label">Total <small>(Inclusive of GST)</small></span><strong>₹<span id="cartTotal">0</span></strong></div>
+      </div>
+      <p class="checkout-error" id="checkoutError" role="alert" hidden></p>
+      <div class="cart-actions">
+        <a class="cart-more-button" href="/listings">Add More to Cart</a>
+        <button class="cart-pay-button" type="submit" id="placeOrder">Place Order</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<div class="order-success-overlay" id="orderSuccess" role="dialog" aria-modal="true" aria-labelledby="successTitle" hidden>
+  <div class="order-success-card">
+    <div class="order-success-mark" aria-hidden="true">✓</div>
+    <p class="home-kicker" id="successKicker">GAVLEE GOODNESS IS ON ITS WAY</p>
+    <h2 id="successTitle">Congratulations, your order has been placed!</h2>
+    <p id="successDetail"></p>
+    <div class="pickup-qr" id="pickupQr" hidden><div id="pickupQrCode"></div><strong id="pickupQrTotal"></strong><span>Show this QR code when you collect your order.</span></div>
+    <strong class="order-reference" id="orderReference"></strong>
+    <p class="order-reference-note" id="referenceNote"></p>
+    <button class="home-button home-button-green" id="closeSuccess" type="button">Continue shopping</button>
+  </div>
+</div>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  (() => {
+    const key = "gavleeCart";
+    const itemsElement = document.getElementById("cartItems");
+    const emptyElement = document.getElementById("cartEmpty");
+    const checkoutForm = document.getElementById("checkoutForm");
+    const totalElement = document.getElementById("cartTotal");
+    const countElement = document.querySelector(".navbar-cart-count");
+    const deliveryFee = Number("<%= deliveryFee %>");
+    const fulfillmentInputs = document.querySelectorAll('input[name="fulfillment"]');
+    const paymentInputs = document.querySelectorAll('input[name="paymentMethod"]');
+    const errorElement = document.getElementById("checkoutError");
+    const orderSuccess = document.getElementById("orderSuccess");
+    const addressKey = "gavleeDeliveryAddress";
+    let savedAddress = localStorage.getItem(addressKey) || "";
+    let confirmedAddress = savedAddress;
+    let confirmedNewAddress = false;
+    if (savedAddress) {
+      checkoutForm.querySelector('input[name="addressChoice"][value="no"]').disabled = false;
+      document.getElementById("savedAddressText").textContent = savedAddress;
+      checkoutForm.querySelector('input[name="addressChoice"][value="no"]').checked = true;
+      checkoutForm.querySelector('input[name="addressChoice"][value="yes"]').checked = false;
+    }
+    const rupees = value => Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+    function readCart() {
+      try {
+        const items = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(items) ? items.filter(item => item && typeof item.title === "string" && Number.isFinite(Number(item.price))) : [];
+      } catch { return []; }
+    }
+
+    function renderCart() {
+      const cart = readCart();
+      itemsElement.replaceChildren();
+      const hasItems = cart.length > 0;
+      emptyElement.hidden = hasItems;
+      checkoutForm.hidden = !hasItems;
+      if (!hasItems) {
+        if (countElement) { countElement.textContent = "0"; countElement.hidden = true; }
+        return;
+      }
+
+      cart.forEach((item, index) => {
+        const row = document.createElement("article");
+        row.className = "cart-item";
+        const image = document.createElement("img");
+        image.className = "cart-item-image";
+        image.src = item.image || "/images/general.jpeg";
+        image.alt = item.title;
+        const details = document.createElement("div");
+        details.className = "cart-item-details";
+        const title = document.createElement("h2");
+        title.textContent = item.title;
+        details.append(title);
+        if (item.flavour) {
+          const flavour = document.createElement("p");
+          flavour.className = "cart-item-flavour";
+          flavour.textContent = item.flavour;
+          details.append(flavour);
+        }
+        const quantity = Math.max(1, Number(item.quantity) || 1);
+        const itemPrice = Number(item.price) * quantity;
+        const price = document.createElement("div");
+        price.className = "cart-item-price-block";
+        const basePrice = document.createElement("strong");
+        basePrice.className = "cart-item-price";
+        basePrice.textContent = `₹${rupees(itemPrice)}`;
+        price.append(basePrice);
+        const remove = document.createElement("button");
+        remove.className = "cart-remove-button";
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", `Remove ${item.title} from cart`);
+        remove.addEventListener("click", () => {
+          const updated = readCart();
+          updated.splice(index, 1);
+          localStorage.setItem(key, JSON.stringify(updated));
+          renderCart();
+        });
+        row.append(image, details, price, remove);
+        itemsElement.append(row);
+      });
+
+      const itemsTotal = cart.reduce((sum, item) => sum + Number(item.price) * Math.max(1, Number(item.quantity) || 1), 0);
+      const gstTotal = cart.reduce((sum, item) => {
+        const itemPrice = Number(item.price) * Math.max(1, Number(item.quantity) || 1);
+        return sum + Math.round(itemPrice * 0.18 * 100) / 100;
+      }, 0);
+      const fulfillment = checkoutForm.querySelector('input[name="fulfillment"]:checked')?.value || "delivery";
+      const shipping = fulfillment === "delivery" ? deliveryFee : 0;
+      document.getElementById("itemsTotal").textContent = rupees(Math.round(itemsTotal * 100) / 100);
+      document.getElementById("shippingTotal").textContent = rupees(shipping);
+      document.getElementById("shippingRow").hidden = fulfillment !== "delivery";
+      totalElement.textContent = rupees(Math.round((itemsTotal + gstTotal + shipping) * 100) / 100);
+      if (countElement) {
+        countElement.textContent = cart.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0);
+        countElement.hidden = false;
+      }
+    }
+
+    function syncCheckoutOptions() {
+      const fulfillment = checkoutForm.querySelector('input[name="fulfillment"]:checked')?.value || "delivery";
+      const delivery = fulfillment === "delivery";
+      document.getElementById("deliveryPayments").hidden = !delivery;
+      document.getElementById("pickupPayments").hidden = delivery;
+      const addressOptions = document.getElementById("deliveryAddressOptions");
+      addressOptions.hidden = !delivery;
+      const addressChoice = checkoutForm.querySelector('input[name="addressChoice"]:checked')?.value || "yes";
+      const addressEntry = document.getElementById("newAddressEntry");
+      const confirmedView = document.getElementById("confirmedAddress");
+      const useSaved = delivery && addressChoice === "no" && Boolean(savedAddress);
+      if (delivery && addressChoice === "yes" && confirmedNewAddress && confirmedAddress.length >= 8) {
+        addressEntry.hidden = true;
+        confirmedView.textContent = `Delivery address: ${confirmedAddress}`;
+        confirmedView.hidden = false;
+      } else if (delivery && addressChoice === "yes") {
+        addressEntry.hidden = false;
+        confirmedView.hidden = true;
+        document.getElementById("newDeliveryAddress").value ||= "";
+      } else if (useSaved) {
+        confirmedAddress = savedAddress;
+        addressEntry.hidden = true;
+        confirmedView.textContent = `Delivery address: ${savedAddress}`;
+        confirmedView.hidden = false;
+      } else {
+        addressEntry.hidden = true;
+        confirmedView.hidden = true;
+      }
+      const addressReady = !delivery || (addressChoice === "no" ? Boolean(savedAddress) : addressChoice === "yes" && confirmedNewAddress && confirmedAddress.length >= 8);
+      document.getElementById("checkoutPaymentOptions").hidden = !addressReady;
+      const validMethod = [...paymentInputs].find(input => !input.closest("[hidden]") && input.checked);
+      if (!validMethod) {
+        const defaultMethod = [...paymentInputs].find(input => !input.closest("[hidden]"));
+        if (defaultMethod) defaultMethod.checked = true;
+      }
+      const method = [...paymentInputs].find(input => input.checked)?.value;
+      document.getElementById("placeOrder").textContent = method === "online" ? "Pay Online" : method === "cod" ? "Place Order" : "Place Pickup Order";
+      renderCart();
+    }
+
+    document.getElementById("confirmAddress").addEventListener("click", async () => {
+      const address = document.getElementById("newDeliveryAddress").value.trim();
+      if (address.length < 8) {
+        errorElement.textContent = "Enter a complete delivery address.";
+        errorElement.hidden = false;
+        return;
+      }
+      const button = document.getElementById("confirmAddress");
+      button.disabled = true;
+      try {
+        const response = await fetch("/cart/address", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not save this address.");
+        confirmedAddress = result.address;
+        savedAddress = result.address;
+        document.getElementById("savedAddressText").textContent = savedAddress;
+        checkoutForm.querySelector('input[name="addressChoice"][value="no"]').disabled = false;
+        confirmedNewAddress = true;
+        localStorage.setItem(addressKey, confirmedAddress);
+        document.getElementById("newAddressEntry").hidden = true;
+        const confirmedView = document.getElementById("confirmedAddress");
+        confirmedView.textContent = `Delivery address: ${confirmedAddress}`;
+        confirmedView.hidden = false;
+        document.getElementById("checkoutPaymentOptions").hidden = false;
+        errorElement.hidden = true;
+      } catch (error) {
+        errorElement.textContent = error.message;
+        errorElement.hidden = false;
+      } finally { button.disabled = false; }
+    });
+
+    async function createOrder(paymentMethod) {
+      const cart = readCart();
+      const fulfillment = checkoutForm.querySelector('input[name="fulfillment"]:checked').value;
+      const response = await fetch("/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: cart.map(item => ({ id: item.id, flavour: item.flavour || "", quantity: Math.max(1, Number(item.quantity) || 1) })),
+          fulfillment,
+          paymentMethod,
+          address: fulfillment === "delivery" ? confirmedAddress : "",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not place this order.");
+      return data;
+    }
+
+    document.getElementById("closeSuccess").addEventListener("click", () => { window.location.href = "/listings"; });
+
+    function showConfirmation(order) {
+      const pickup = order.fulfillment === "pickup";
+      document.getElementById("successKicker").textContent = pickup ? "GAVLEE GOODNESS IS WAITING FOR YOU AT THE STORE" : "GAVLEE GOODNESS IS ON ITS WAY";
+      document.getElementById("successDetail").textContent = pickup
+        ? "Your store pickup order has been placed successfully."
+        : "Your order has been placed successfully for delivery to your selected address.";
+      const reference = document.getElementById("orderReference");
+      reference.textContent = order.reference;
+      reference.hidden = pickup;
+      const pickupQr = document.getElementById("pickupQr");
+      pickupQr.hidden = !pickup;
+      const qrContainer = document.getElementById("pickupQrCode");
+      qrContainer.replaceChildren();
+      if (pickup) {
+        document.getElementById("pickupQrTotal").textContent = `Order total: ₹${rupees(order.total)}`;
+        if (window.QRCode) new QRCode(qrContainer, { text: `Reference: ${order.reference}\nTotal: INR ${rupees(order.total)}`, width: 176, height: 176, colorDark: "#25251f", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      }
+      document.getElementById("referenceNote").textContent = order.fulfillment === "pickup"
+        ? "Scan this QR code when collecting your items from the store. Thank you."
+        : `Order total: ₹${rupees(order.total)}. Please keep this reference for your records.`;
+      localStorage.removeItem(key);
+      if (countElement) { countElement.textContent = "0"; countElement.hidden = true; }
+      orderSuccess.hidden = false;
+    }
+
+    checkoutForm.addEventListener("change", syncCheckoutOptions);
+    checkoutForm.querySelectorAll('input[name="addressChoice"]').forEach(input => input.addEventListener("change", () => {
+      if (input.value === "yes") confirmedNewAddress = false;
+      syncCheckoutOptions();
+    }));
+    document.getElementById("newDeliveryAddress").addEventListener("input", () => {
+      confirmedNewAddress = false;
+      document.getElementById("checkoutPaymentOptions").hidden = true;
+    });
+    checkoutForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      errorElement.hidden = true;
+      const submitButton = document.getElementById("placeOrder");
+      submitButton.disabled = true;
+      try {
+        const method = [...paymentInputs].find(input => input.checked)?.value;
+        const result = await createOrder(method);
+        if (result.online) {
+          const checkout = new Razorpay({
+            key: result.keyId,
+            amount: Math.round(result.total * 100),
+            currency: "INR",
+            name: "Gavlee",
+            description: "Gavlee order payment",
+            order_id: result.razorpayOrderId,
+            prefill: { name: result.customer.name, email: result.customer.email, contact: result.customer.phone },
+            theme: { color: "#f28c18" },
+            handler: async payment => {
+              try {
+                const verified = await fetch("/orders/razorpay/verify", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ razorpayOrderId: payment.razorpay_order_id, razorpayPaymentId: payment.razorpay_payment_id, razorpaySignature: payment.razorpay_signature }),
+                });
+                const order = await verified.json();
+                if (!verified.ok) throw new Error(order.error || "Payment could not be confirmed.");
+                showConfirmation(order);
+              } catch (error) { errorElement.textContent = error.message; errorElement.hidden = false; }
+              finally { submitButton.disabled = false; }
+            },
+            modal: { ondismiss: () => { submitButton.disabled = false; } },
+          });
+          checkout.on("payment.failed", failure => {
+            errorElement.textContent = failure.error?.description || "Payment was not completed. Please try again.";
+            errorElement.hidden = false;
+            submitButton.disabled = false;
+          });
+          checkout.open();
+        } else {
+          showConfirmation(result);
+          submitButton.disabled = false;
+        }
+      } catch (error) {
+        errorElement.textContent = error.message;
+        errorElement.hidden = false;
+        submitButton.disabled = false;
+      }
+    });
+    fulfillmentInputs.forEach(input => input.addEventListener("change", syncCheckoutOptions));
+    document.getElementById("closeSuccess").addEventListener("click", () => { window.location.href = "/listings"; });
+    window.addEventListener("storage", renderCart);
+    syncCheckoutOptions();
+    renderCart();
+  })();
+</script>
