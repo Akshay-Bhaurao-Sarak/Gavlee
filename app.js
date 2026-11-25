@@ -55,61 +55,6 @@ app.engine('ejs',ejsMate);
 app.use(express.static("public"));
 app.use(express.static(path.join(__dirname, "public")));
 
-function sha256(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
-async function hashPassword(password) { const salt = crypto.randomBytes(16).toString("hex"); const key = await scrypt(password, salt, 64); return `${salt}:${key.toString("hex")}`; }
-async function verifyPassword(password, encoded) { const [salt, key] = String(encoded || "").split(":"); if (!salt || !key) return false; const actual = await scrypt(password, salt, 64); const expected = Buffer.from(key, "hex"); return expected.length === actual.length && crypto.timingSafeEqual(actual, expected); }
-function cookieOptions(maxAge) { return { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge }; }
-function safeUser(user) { return user ? { id: user._id, email: user.email, name: user.name, avatar: user.avatar } : null; }
-app.use(async (req, res, next) => {
-    if (DEV_AUTH_BYPASS) {
-        req.user = { _id: "local-development-user", email: "dev@localhost", name: "Local developer", avatar: "" };
-        res.locals.currentUser = safeUser(req.user);
-        return next();
-    }
-    try {
-        const token = req.cookies?.[SESSION_COOKIE] || (req.headers.cookie || "").split(";").map(v => v.trim()).find(v => v.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1);
-        if (token) {
-            const session = await AuthSession.findOne({ tokenHash: sha256(decodeURIComponent(token)), expiresAt: { $gt: new Date() } }).populate("user");
-            if (session?.user) { req.user = session.user; res.locals.currentUser = safeUser(session.user); }
-        }
-        next();
-    } catch (error) { next(error); }
-});
-function requireLogin(req, res, next) { if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`); next(); }
-function renderAuth(res, options = {}) { res.render("listings/auth.ejs", { layout: false, mode: "login", stage: "start", email: "", error: "", ...options }); }
-async function startSession(user, res) {
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-    await AuthSession.create({ tokenHash: sha256(token), user: user._id, expiresAt });
-    res.cookie(SESSION_COOKIE, token, cookieOptions(SESSION_DAYS * 24 * 60 * 60 * 1000));
-}
-async function sendVerificationCode(email, code) {
-    const login = process.env.BREVO_SMTP_LOGIN;
-    const key = process.env.BREVO_SMTP_KEY;
-    const from = process.env.BREVO_FROM_EMAIL;
-    if (!login || !key || !from) {
-        throw new Error("Brevo SMTP settings are incomplete. Set BREVO_SMTP_LOGIN, BREVO_SMTP_KEY, and BREVO_FROM_EMAIL.");
-    }
-    const transporter = nodemailer.createTransport({
-        host: "smtp-relay.brevo.com",
-        port: 587,
-        secure: false,
-        requireTLS: true,
-        auth: { user: login, pass: key },
-    });
-    await transporter.sendMail({
-        from,
-        to: email,
-        subject: "Your Gavlee verification code",
-        text: `Your Gavlee verification code is ${code}. It expires in 10 minutes.`,
-    });
-}
-async function issueVerification(email) {
-    const code = String(crypto.randomInt(100000, 1000000));
-    await sendVerificationCode(email, code);
-    pendingEmailVerifications.set(email, { codeHash: sha256(code), expiresAt: Date.now() + 10 * 60 * 1000 });
-}
-
 app.get("/",(req,res)=> res.render("listings/home.ejs"));
 app.get("/cart",(req,res) => res.render("listings/cart.ejs", { deliveryFee: DELIVERY_FEE }));
 app.post("/cart/address", requireLogin, async (req,res,next) => {
@@ -119,7 +64,7 @@ app.post("/cart/address", requireLogin, async (req,res,next) => {
         res.json({ address });
     } catch (error) { next(error); }
 });
-app.post("/orders", requireLogin, async (req, res, next) => {
+app.post("/orders", async (req, res, next) => {
     try {
         const { items, fulfillment, paymentMethod, address } = req.body || {};
         if (!Array.isArray(items) || !items.length || items.length > 50) return res.status(400).json({ error: "Your cart is empty or too large." });
