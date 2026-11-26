@@ -925,7 +925,7 @@ font-weight:400 !important;
 .home-story-copy .home-button-green { background: #f28c18; color: #fff; }
 .home-story-copy .home-button-green:hover { background: #dc7410; color: #fff; }
 .home-story-aside { position: absolute; right: 1rem; bottom: 1rem; color: rgb(90 82 59 / 36%); font-family: Georgia, serif; font-size: .58rem; letter-spacing: .16em; line-height: 1.5; text-align: right; }
-.home-endcap { position: relative; left: 50%; display: flex; width: 100vw; min-height: 300px; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 0; padding: 2.5rem 1rem; transform: translateX(-50%); background: linear-gradient(90deg, rgb(35 11 7 / 84%), rgb(35 11 7 / 52%) 48%, rgb(35 11 7 / 28%)), url("/0151bcb5-2d5d-4072-a1cb-3337ceef5186.png") center / cover no-repeat; color: #fff8e8; text-align: center; }
+.home-endcap { position: relative; left: 50%; display: flex; width: 100vw; min-height: 300px; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 0; padding: 2.5rem 1rem; transform: translateX(-50%); background: linear-gradient(90deg, rgb(35 11 7 / 84%), rgb(35 11 7 / 52%) 48%, rgb(35 11 7 / 28%)), url("/images/0151bcb5-2d5d-4072-a1cb-3337ceef5186.png") center / cover no-repeat; color: #fff8e8; text-align: center; }
 .home-endcap .home-kicker { color: #ffd28a; text-shadow: 0 2px 8px rgb(0 0 0 / 55%); }
 .home-endcap h2 { margin: 0 0 1.3rem; color: #fff8e8; font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 650; letter-spacing: -.06em; line-height: 1.05; text-shadow: 0 2px 14px rgb(0 0 0 / 60%); }
 .home-endcap h2 em { color: #ffcb73; }

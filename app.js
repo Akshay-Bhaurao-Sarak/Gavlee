@@ -7,17 +7,7 @@ const path = require("path");
 const methodOverride = require("method-override");
 const ejsMate = require("ejs-mate");
 const crypto = require("crypto");
-const { promisify } = require("util");
-const User = require("./models/user.js");
-const AuthSession = require("./models/authsession.js");
-const nodemailer = require("nodemailer");
-const scrypt = promisify(crypto.scrypt);
-const SESSION_COOKIE = "gavlee_session";
-const SESSION_DAYS = 30;
 const DELIVERY_FEE = 80;
-const pendingEmailVerifications = new Map();
-// Local development opens the app directly. Production still requires real sessions.
-const DEV_AUTH_BYPASS = process.env.NODE_ENV !== "production";
 
 
 
@@ -52,12 +42,11 @@ app.use(express.urlencoded({extended:true, limit: "4mb"}));
 app.use(express.json({ limit: "3mb" }));
 app.use(methodOverride("_method"));
 app.engine('ejs',ejsMate);
-app.use(express.static("public"));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/",(req,res)=> res.render("listings/home.ejs"));
 app.get("/cart",(req,res) => res.render("listings/cart.ejs", { deliveryFee: DELIVERY_FEE }));
-app.post("/cart/address", requireLogin, async (req,res,next) => {
+app.post("/cart/address", async (req,res,next) => {
     try {
         const address = String(req.body.address || "").trim().slice(0, 500);
         if (address.length < 8) return res.status(400).json({ error: "Enter a complete delivery address." });
@@ -71,9 +60,9 @@ app.post("/orders", async (req, res, next) => {
         if (!['delivery', 'pickup'].includes(fulfillment)) return res.status(400).json({ error: "Choose delivery or store pickup." });
         if (fulfillment === "delivery" && !["cod", "online"].includes(paymentMethod)) return res.status(400).json({ error: "Choose a payment method." });
         if (fulfillment === "pickup" && !["pay-at-store", "online"].includes(paymentMethod)) return res.status(400).json({ error: "Choose a payment method." });
-        const customerName = String(req.user?.name || (DEV_AUTH_BYPASS ? "Local developer" : "Gavlee customer")).trim().slice(0, 100);
+        const customerName = "Gavlee customer";
         const customerPhone = "";
-        const customerEmail = String(req.user?.email || "").trim().slice(0, 120);
+        const customerEmail = "";
         const deliveryAddress = String(address || "").trim().slice(0, 500);
         if (fulfillment === "delivery" && deliveryAddress.length < 8) return res.status(400).json({ error: "Enter a complete delivery address." });
 
@@ -132,7 +121,7 @@ app.post("/orders", async (req, res, next) => {
         res.status(201).json({ reference: order.reference, total: order.total, fulfillment: order.fulfillment });
     } catch (error) { next(error); }
 });
-app.post("/orders/razorpay/verify", requireLogin, async (req, res, next) => {
+app.post("/orders/razorpay/verify", async (req, res, next) => {
     try {
         const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
         const secret = process.env.RAZORPAY_KEY_SECRET;
@@ -155,85 +144,27 @@ app.post("/orders/razorpay/verify", requireLogin, async (req, res, next) => {
     } catch (error) { next(error); }
 });
 app.get("/checkout/online", (req,res) => res.redirect("/cart"));
-app.get("/login", (req,res) => DEV_AUTH_BYPASS ? res.redirect("/listings") : (req.user ? res.redirect("/listings") : renderAuth(res, { mode: "login", error: req.query.error || "" })));
-app.post("/login", async (req,res,next) => {
-    try {
-        const email = String(req.body.email || "").trim().toLowerCase();
-        const user = await User.findOne({ email });
-        if (!user || !(await verifyPassword(req.body.password || "", user.passwordHash))) return renderAuth(res, { error: "Email or password is incorrect." });
-        user.lastLoginAt = new Date(); await user.save(); await startSession(user, res);
-        const nextPath = typeof req.query.next === "string" && req.query.next.startsWith("/") && !req.query.next.startsWith("//") ? req.query.next : "/listings";
-        res.redirect(nextPath);
-    } catch (error) { next(error); }
-});
-app.get("/register", (req,res) => req.user ? res.redirect("/listings") : renderAuth(res, { mode: "register" }));
-app.post("/register", async (req,res,next) => {
-    try {
-        const email = String(req.body.email || "").trim().toLowerCase();
-        if (!/^\S+@\S+\.\S+$/.test(email)) return renderAuth(res, { mode: "register", error: "Enter a valid email address." });
-        if (await User.exists({ email })) return renderAuth(res, { mode: "register", error: "An account with that email already exists. Sign in instead." });
-        await issueVerification(email);
-        res.redirect(`/register/verify?email=${encodeURIComponent(email)}`);
-    } catch (error) {
-        console.error("OTP email delivery failed; check the Brevo SMTP login, key, and sender configuration.");
-        renderAuth(res, { mode: "register", error: "We couldn't send the verification email. Please check the Brevo SMTP settings and try again." });
-    }
-});
-app.get("/register/verify", (req,res) => renderAuth(res, { stage: "verify", email: String(req.query.email || "").toLowerCase(), error: req.query.error || "" }));
-app.post("/register/resend", async (req,res,next) => { try { const email = String(req.body.email || "").trim().toLowerCase(); await issueVerification(email); res.redirect(`/register/verify?email=${encodeURIComponent(email)}`); } catch (error) { console.error("OTP resend failed; check the Brevo SMTP login, key, and sender configuration."); renderAuth(res, { stage: "verify", email: String(req.body.email || "").trim().toLowerCase(), error: "We couldn't send another code. Please check the Brevo SMTP settings and try again." }); } });
-app.post("/register/verify", async (req,res,next) => {
-    try {
-        const email = String(req.body.email || "").trim().toLowerCase();
-        const record = pendingEmailVerifications.get(email);
-        if (!record || record.expiresAt <= Date.now() || !/^[0-9]{6}$/.test(req.body.otp || "") || record.codeHash !== sha256(req.body.otp)) return res.redirect(`/register/verify?email=${encodeURIComponent(email)}&error=${encodeURIComponent("That code is invalid or expired. Request a new one and try again.")}`);
-        record.codeHash = "VERIFIED";
-        res.redirect(`/register/finish?email=${encodeURIComponent(email)}`);
-    } catch (error) { next(error); }
-});
-app.get("/register/finish", async (req,res) => {
-    const email = String(req.query.email || "").trim().toLowerCase();
-    const verified = pendingEmailVerifications.get(email)?.codeHash === "VERIFIED" && pendingEmailVerifications.get(email).expiresAt > Date.now();
-    if (!email || !verified) return res.redirect(`/register/verify?email=${encodeURIComponent(email)}`);
-    renderAuth(res, { stage: "finish", email, error: req.query.error || "" });
-});
-app.post("/register/complete", async (req,res,next) => {
-    try {
-        const email = String(req.body.email || "").trim().toLowerCase();
-        const verification = pendingEmailVerifications.get(email);
-        const verified = verification?.codeHash === "VERIFIED" && verification.expiresAt > Date.now();
-        if (!email || !verified) return res.redirect(`/register/verify?email=${encodeURIComponent(email)}`);
-        if ((req.body.password || "").length < 8 || req.body.password !== req.body.confirmPassword) return renderAuth(res, { stage: "finish", email, error: "Use a password of at least 8 characters and make sure both entries match." });
-        const passwordHash = await hashPassword(req.body.password);
-        const avatar = typeof req.body.avatarData === "string" && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*$/.test(req.body.avatarData) && req.body.avatarData.length <= 2800000 ? req.body.avatarData : "";
-        const user = await User.create({ email, passwordHash, name: String(req.body.name || "").trim().slice(0, 80), avatar, emailVerified: true, lastLoginAt: new Date() });
-        pendingEmailVerifications.delete(email);
-        await startSession(user, res);
-        res.redirect("/listings");
-    } catch (error) { if (error.code === 11000) return renderAuth(res, { mode: "register", error: "An account with that email already exists. Sign in instead." }); next(error); }
-});
-app.post("/logout", async (req,res,next) => { try { const token = (req.headers.cookie || "").split(";").map(v => v.trim()).find(v => v.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1); if (token) await AuthSession.deleteOne({ tokenHash: sha256(decodeURIComponent(token)) }); res.clearCookie(SESSION_COOKIE, cookieOptions(0)); res.redirect("/login"); } catch (error) { next(error); } });
 
 //index route
 app.get("/listings",async (req,res) => {
-   if (!DEV_AUTH_BYPASS && !req.user) return res.redirect("/login");
    const allListings = await Listing.find({});
    res.render("./listings/index.ejs",{ allListings });
 });
 
 //new route
-app.get("/listings/new",requireLogin,(req, res) => {
+app.get("/listings/new",(req, res) => {
  res.render("listings/new.ejs");
 });
 
 //show route
-app.get("/listings/:id",requireLogin,async (req,res) =>{
+app.get("/listings/:id",async (req,res) =>{
  let {id} = req.params;
  const listing = await Listing.findById(id);
  res.render("listings/show.ejs",{ listing });
 });
 
 //creat route
-app.post("/listings" , requireLogin, async (req,res) => {
+app.post("/listings" , async (req,res) => {
     const listingData = { ...req.body.listing };
     listingData.hasFlavours = listingData.hasFlavours === "true";
     if (listingData.image && !/^https?:\/\//i.test(listingData.image)) {
@@ -249,14 +180,14 @@ app.post("/listings" , requireLogin, async (req,res) => {
 });
 
 //Edit route
-app.get("/listings/:id/edit", requireLogin, async (req,res) => {
+app.get("/listings/:id/edit", async (req,res) => {
  let {id} = req.params;
  const listing = await Listing.findById(id);
  res.render("listings/edit.ejs",{ listing });  
 });
 
 //Update route
-app.put("/listings/:id", requireLogin, async(req,res)=>{
+app.put("/listings/:id", async(req,res)=>{
     let{id} = req.params;
     const listingData = { ...req.body.listing };
     listingData.hasFlavours = listingData.hasFlavours === "true";
@@ -272,7 +203,7 @@ app.put("/listings/:id", requireLogin, async(req,res)=>{
 });
 
 //Delete route
-app.delete("/listings/:id", requireLogin, async (req,res) => {
+app.delete("/listings/:id", async (req,res) => {
     let{ id } = req.params;
     let deletedListing = await Listing.findByIdAndDelete(id);
     console.log(deletedListing);
