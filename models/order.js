@@ -24,7 +24,7 @@ const orderSchema = new mongoose.Schema({
     total: { type: Number, required: true },
     status: { type: String, default: "placed" },
     razorpayOrderId: String,
-    razorpayPaymentId: String,
+    razorpayPaymentId: { type: String, unique: true, sparse: true },
 }, { timestamps: true });
 
 module.exports = mongoose.model("Order", orderSchema);

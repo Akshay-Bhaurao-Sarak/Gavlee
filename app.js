@@ -8,6 +8,7 @@ const methodOverride = require("method-override");
 const ejsMate = require("ejs-mate");
 const crypto = require("crypto");
 const DELIVERY_FEE = 80;
+const raizorpay ="razorpay"
 
 
 
@@ -39,6 +40,41 @@ async function main(){
 app.set("view engine","ejs");
 app.set("views",path.join(__dirname,"views"));
 app.use(express.urlencoded({extended:true, limit: "4mb"}));
+// Keep the raw body available for Razorpay's webhook signature verification.
+app.post("/webhooks/razorpay", express.raw({ type: "application/json", limit: "1mb" }), async (req, res, next) => {
+    try {
+        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+        const signature = req.get("x-razorpay-signature");
+        if (!webhookSecret || !signature || !Buffer.isBuffer(req.body)) return res.sendStatus(400);
+        const expected = crypto.createHmac("sha256", webhookSecret).update(req.body).digest();
+        let received;
+        try { received = Buffer.from(signature, "hex"); } catch { return res.sendStatus(400); }
+        if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return res.sendStatus(400);
+
+        const event = JSON.parse(req.body.toString("utf8"));
+        if (event.event === "payment.captured") {
+            const payment = event.payload?.payment?.entity;
+            if (payment?.order_id && payment?.id) {
+                const order = await Order.findOne({ razorpayOrderId: payment.order_id, paymentMethod: "online" });
+                if (order && payment.amount === Math.round(order.total * 100) && payment.currency === "INR") {
+                    if (order.status === "pending") {
+                        const updated = await Order.findOneAndUpdate(
+                            { _id: order._id, status: "pending", razorpayPaymentId: null },
+                            { $set: { status: "placed", razorpayPaymentId: payment.id } }
+                        );
+                        if (!updated) {
+                            const current = await Order.findById(order._id);
+                            if (current?.status !== "placed" || current.razorpayPaymentId !== payment.id) return res.sendStatus(409);
+                        }
+                    } else if (order.razorpayPaymentId && order.razorpayPaymentId !== payment.id) {
+                        return res.sendStatus(409);
+                    }
+                }
+            }
+        }
+        res.sendStatus(200);
+    } catch (error) { next(error); }
+});
 app.use(express.json({ limit: "3mb" }));
 app.use(methodOverride("_method"));
 app.engine('ejs',ejsMate);
@@ -126,7 +162,7 @@ app.post("/orders/razorpay/verify", async (req, res, next) => {
         const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
         const secret = process.env.RAZORPAY_KEY_SECRET;
         if (!process.env.RAZORPAY_KEY_ID || !secret || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) return res.status(400).json({ error: "Payment details are incomplete." });
-        const order = await Order.findOne({ razorpayOrderId, paymentMethod: "online", status: "pending" });
+        const order = await Order.findOne({ razorpayOrderId, paymentMethod: "online" });
         if (!order) return res.status(404).json({ error: "The pending order could not be found." });
         const expected = crypto.createHmac("sha256", secret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest();
         const received = Buffer.from(String(razorpaySignature), "hex");
@@ -137,9 +173,19 @@ app.post("/orders/razorpay/verify", async (req, res, next) => {
         });
         const payment = await paymentResponse.json();
         if (!paymentResponse.ok || payment.order_id !== razorpayOrderId || payment.status !== "captured" || payment.amount !== Math.round(order.total * 100) || payment.currency !== "INR") return res.status(400).json({ error: "Payment is not confirmed as captured yet." });
-        order.status = "placed";
-        order.razorpayPaymentId = razorpayPaymentId;
-        await order.save();
+        if (order.status === "placed") {
+            if (order.razorpayPaymentId !== razorpayPaymentId) return res.status(409).json({ error: "This order was confirmed with a different payment." });
+        } else {
+            const updated = await Order.findOneAndUpdate(
+                { _id: order._id, status: "pending", razorpayPaymentId: null },
+                { $set: { status: "placed", razorpayPaymentId } },
+                { new: true }
+            );
+            if (!updated) {
+                const current = await Order.findById(order._id);
+                if (current?.status !== "placed" || current.razorpayPaymentId !== razorpayPaymentId) return res.status(409).json({ error: "Payment confirmation is already being processed." });
+            }
+        }
         res.json({ reference: order.reference, total: order.total, fulfillment: order.fulfillment });
     } catch (error) { next(error); }
 });

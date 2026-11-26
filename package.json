@@ -21,6 +21,7 @@
     "mongoose": "^9.12.1",
     "moongoose": "^0.0.5",
     "nodemailer": "^10.6.1",
+    "razorpay": "^2.9.8",
     "react": "^19.3.1"
   }
 }
