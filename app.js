@@ -39,6 +39,7 @@ async function main(){
 
 app.set("view engine","ejs");
 app.set("views",path.join(__dirname,"views"));
+app.locals.enableSpeedInsights = process.env.VERCEL === "1";
 app.use(express.urlencoded({extended:true, limit: "4mb"}));
 // Keep the raw body available for Razorpay's webhook signature verification.
 app.post("/webhooks/razorpay", express.raw({ type: "application/json", limit: "1mb" }), async (req, res, next) => {
