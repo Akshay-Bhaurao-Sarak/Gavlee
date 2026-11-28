@@ -12,7 +12,33 @@ const raizorpay ="razorpay"
 
 
 
-const MONGO_URL = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/gavlee";
+let mongoConnection;
+
+async function connectToDatabase() {
+    const uri = process.env.MONGODB_URI?.trim();
+    const hosted = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+    if (!uri && hosted) {
+        throw new Error("Set MONGODB_URI to the MongoDB Atlas connection string.");
+    }
+
+    mongoConnection ??= mongoose.connect(uri || "mongodb://127.0.0.1:27017/gavlee", {
+        serverSelectionTimeoutMS: 5000,
+    }).catch(error => {
+        mongoConnection = undefined;
+        throw error;
+    });
+    await mongoConnection;
+}
+
+async function requireDatabase(req, res, next) {
+    try {
+        await connectToDatabase();
+    } catch (error) {
+        console.error("MongoDB connection failed:", error.message);
+        return res.status(503).send("The database is temporarily unavailable.");
+    }
+    next();
+}
 
 function parseFlavourOptions(options) {
     if (!options) return [];
@@ -23,18 +49,6 @@ function parseFlavourOptions(options) {
             price: Number(option.price),
         }))
         .filter(option => option.name && Number.isFinite(option.price) && option.price >= 0);
-}
-
-main()
-.then(() => {
-    console.log("Connected to Db");
-})
-.catch((err) => {
-    console.log(err);
-});
-
-async function main(){
-  await mongoose.connect(MONGO_URL);
 }
 
 app.set("view engine","ejs");
@@ -56,6 +70,7 @@ app.post("/webhooks/razorpay", express.raw({ type: "application/json", limit: "1
         if (event.event === "payment.captured") {
             const payment = event.payload?.payment?.entity;
             if (payment?.order_id && payment?.id) {
+                await connectToDatabase();
                 const order = await Order.findOne({ razorpayOrderId: payment.order_id, paymentMethod: "online" });
                 if (order && payment.amount === Math.round(order.total * 100) && payment.currency === "INR") {
                     if (order.status === "pending") {
@@ -80,6 +95,7 @@ app.use(express.json({ limit: "3mb" }));
 app.use(methodOverride("_method"));
 app.engine('ejs',ejsMate);
 app.use(express.static(path.join(__dirname, "public")));
+app.use(["/listings", "/orders"], requireDatabase);
 
 app.get("/",(req,res)=> res.render("listings/home.ejs"));
 app.get("/cart",(req,res) => res.render("listings/cart.ejs", { deliveryFee: DELIVERY_FEE }));
@@ -259,8 +275,12 @@ app.delete("/listings/:id", async (req,res) => {
 
 
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT,()=>{
-    console.log(`Server is listening to port ${PORT}`); 
-});
+if (require.main === module) {
+    const PORT = process.env.PORT || 8080;
+    app.listen(PORT, () => {
+        console.log(`Server is listening to port ${PORT}`);
+    });
+}
+
+module.exports = app;
 
